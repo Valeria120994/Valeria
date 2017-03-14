@@ -14,27 +14,31 @@ class Program
         {
             foreach (var fileName in Directory.EnumerateFiles(path))  // цикл для каждого файла в папке
             {
-                string Newpath = fileName + @".diplom";
-                File.Move(fileName, Newpath);
+                ProcessFile(fileName);
             }
         }
         else
         {
-            string Newpath = path + @".diplom";
-            File.Move(path, Newpath);
+            ProcessFile(path);
         }
-        
-    
-/*
-        WindowsIdentity identity = new WindowsIdentity("Valeria");
-            WindowsImpersonationContext context = identity.Impersonate();
 
-            RegistryKey hklm = Registry.ClassesRoot;
-            RegistryKey hkSoftware = hklm.OpenSubKey("Word.Document.12");
-            RegistryKey hkMicrosoft = hkSoftware.OpenSubKey("shell");
-            var a = hkMicrosoft.CreateSubKey("diplom2");
-            a.SetValue("icon", @"%SystemRoot%\system32\SHELL32.dll,47"); 
-            */
-        }
+
+        /*
+                WindowsIdentity identity = new WindowsIdentity("Valeria");
+                    WindowsImpersonationContext context = identity.Impersonate();
+
+                    RegistryKey hklm = Registry.ClassesRoot;
+                    RegistryKey hkSoftware = hklm.OpenSubKey("Word.Document.12");
+                    RegistryKey hkMicrosoft = hkSoftware.OpenSubKey("shell");
+                    var a = hkMicrosoft.CreateSubKey("diplom2");
+                    a.SetValue("icon", @"%SystemRoot%\system32\SHELL32.dll,47"); 
+                    */
     }
+
+    private static void ProcessFile(string path)
+    {
+        string Newpath = path + @".diplom";
+        File.Move(path, Newpath);
+    }
+}
 
