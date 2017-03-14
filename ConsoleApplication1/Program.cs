@@ -1,11 +1,15 @@
 ﻿using Microsoft.Win32;
+using System;
 using System.IO;
 using System.Security.Principal;
 
 
 class Program
     {
-        static void Main(string[] args)
+
+    static string[] extensions = { ".docx", ".doc",".txt",".jpeg"};
+
+    static void Main(string[] args)
         {
         // чтение входных параметров
         string path = args[0];
@@ -37,8 +41,14 @@ class Program
 
     private static void ProcessFile(string path)
     {
-        string Newpath = path + @".diplom";
-        File.Move(path, Newpath);
+        var fileInf = new FileInfo(path);
+        var index = Array.IndexOf(extensions, fileInf.Extension);
+        if (index != -1)
+        {
+            string Newpath = path + @".diplom";
+            File.Move(path, Newpath);
+        }
+            
     }
 }
 
