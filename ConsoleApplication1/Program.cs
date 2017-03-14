@@ -7,9 +7,23 @@ class Program
     {
         static void Main(string[] args)
         {
+        // чтение входных параметров
         string path = args[0];
-        string Newpath = path+@".diplom";
-        File.Copy(path, Newpath, true);
+        
+        if (Directory.Exists(path))  // проверяем, что папка существует (папка это или файл)
+        {
+            foreach (var fileName in Directory.EnumerateFiles(path))  // цикл для каждого файла в папке
+            {
+                string Newpath = fileName + @".diplom";
+                File.Move(fileName, Newpath);
+            }
+        }
+        else
+        {
+            string Newpath = path + @".diplom";
+            File.Move(path, Newpath);
+        }
+        
     
 /*
         WindowsIdentity identity = new WindowsIdentity("Valeria");
