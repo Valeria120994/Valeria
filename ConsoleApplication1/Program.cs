@@ -1,5 +1,6 @@
 ﻿using Microsoft.Win32;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Principal;
 
@@ -25,7 +26,18 @@ class Program
             }
             else
             {
-                ProcessFile(path);
+                var fileInf = new FileInfo(path);
+                if (fileInf.Extension.Equals(".diplom")) 
+                {
+                    string Newpath = path.Remove(path.Length-7);
+                    File.Copy(path, Newpath);
+                    Process.Start("explorer.exe", Newpath); // открыть файл через проводник (проводник вызовет программу по умолчанию)
+                    // отрыть файл
+                }
+                else
+                {
+                    ProcessFile(path); // string Newpath = path + @".diplom"; File.Move(path, Newpath);
+                }
             }
 
         }
