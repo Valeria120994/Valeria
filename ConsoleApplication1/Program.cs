@@ -11,22 +11,24 @@ class Program
 
     static void Main(string[] args)
         {
-        // чтение входных параметров
-        string path = args[0];
-        
-        if (Directory.Exists(path))  // проверяем, что папка существует (папка это или файл)
+        if (args.Length > 0)
         {
-            foreach (var fileName in Directory.EnumerateFiles(path))  // цикл для каждого файла в папке
+            // чтение входных параметров
+            string path = args[0];  // провепить, есть ли в массиве хоть один элемент  (args.Length)
+
+            if (Directory.Exists(path))  // проверяем, что папка существует (папка это или файл)
             {
-                ProcessFile(fileName);
+                foreach (var fileName in Directory.EnumerateFiles(path))  // цикл для каждого файла в папке
+                {
+                    ProcessFile(fileName);
+                }
             }
-        }
-        else
-        {
-            ProcessFile(path);
-        }
+            else
+            {
+                ProcessFile(path);
+            }
 
-
+        }
         /*
                 WindowsIdentity identity = new WindowsIdentity("Valeria");
                     WindowsImpersonationContext context = identity.Impersonate();
