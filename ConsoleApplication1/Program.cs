@@ -31,8 +31,11 @@ class Program
                 if (fileInf.Extension.Equals(".diplom"))
                 {
                     string Newpath = path.Remove(path.Length - 7);
-                    File.Copy(path, Newpath);
-                    callProgram(Newpath);  // открыть файл через программу по умолчанию
+                    File.Move(path, Newpath);
+
+                    callProgram(Newpath);  // открыть файл через программу по умолчанию и дождаться завершения
+
+                    File.Move(Newpath, path);
                 }
                 else
                 {
@@ -57,13 +60,16 @@ class Program
     {
         var fileInf = new FileInfo(fileName);  // получаем информацию о файле
         var extension = fileInf.Extension; // получаем расширение файла
+
         RegistryKey hkcr = Registry.ClassesRoot; // открыли большую ветку HKEY_CLASSES_ROOT
         RegistryKey hkrazdel = hkcr.OpenSubKey(extension); // открываем раздел с расширением
         string value = (string)hkrazdel.GetValue("");
         RegistryKey hkrazdel2 = hkcr.OpenSubKey(value).OpenSubKey("shell").OpenSubKey("Open").OpenSubKey("command");
         string value2 = (string)hkrazdel2.GetValue("");
+
         var match = Regex.Match(value2, "(\"[^\"]+\"|[^\\s]+)").Value;
-        Process.Start(match, '"' + fileName + '"');
+       var process =  Process.Start(match, '"' + fileName + '"');
+        process.WaitForExit();
     }
 
     private static void ProcessFile(string path)
