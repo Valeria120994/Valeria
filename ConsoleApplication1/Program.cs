@@ -3,7 +3,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Principal;
-
+using System.Text.RegularExpressions;
 
 class Program
     {
@@ -12,7 +12,7 @@ class Program
 
     static void Main(string[] args)
     {
-        callProgram();
+        
         if (args.Length > 0)
         {
             // чтение входных параметров
@@ -32,8 +32,7 @@ class Program
                 {
                     string Newpath = path.Remove(path.Length - 7);
                     File.Copy(path, Newpath);
-                    Process.Start("explorer.exe", Newpath); // открыть файл через проводник (проводник вызовет программу по умолчанию)
-                    // отрыть файл
+                    callProgram(Newpath);  // открыть файл через программу по умолчанию
                 }
                 else
                 {
@@ -54,13 +53,17 @@ class Program
                     */
     }
 
-    private static void callProgram()
+    private static void callProgram(string fileName)
     {
+        var fileInf = new FileInfo(fileName);  // получаем информацию о файле
+        var extension = fileInf.Extension; // получаем расширение файла
         RegistryKey hkcr = Registry.ClassesRoot; // открыли большую ветку HKEY_CLASSES_ROOT
-        RegistryKey hkrazdel = hkcr.OpenSubKey(".docx"); // открываем раздел с расширением
+        RegistryKey hkrazdel = hkcr.OpenSubKey(extension); // открываем раздел с расширением
         string value = (string)hkrazdel.GetValue("");
         RegistryKey hkrazdel2 = hkcr.OpenSubKey(value).OpenSubKey("shell").OpenSubKey("Open").OpenSubKey("command");
         string value2 = (string)hkrazdel2.GetValue("");
+        var match = Regex.Match(value2, "(\"[^\"]+\"|[^\\s]+)").Value;
+        Process.Start(match, '"' + fileName + '"');
     }
 
     private static void ProcessFile(string path)
