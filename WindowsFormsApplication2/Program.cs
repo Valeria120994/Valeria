@@ -108,8 +108,8 @@ namespace WindowsFormsApplication2
             string value2 = (string)hkrazdel2.GetValue("");
 
             var match = Regex.Match(value2, "(\"[^\"]+\"|[^\\s]+)").Value;
-            // var arguments = value2.Replace(match, "").Replace("%1", '"' + fileName + '"');
-            var arguments = '"' + fileName + '"';
+            var isRunDLL = match.Contains("rundll");
+            var arguments = value2.Replace(match, "").Replace("%1", isRunDLL ? fileName : '"' + fileName + '"');
             var process = Process.Start(match, arguments);
             process.WaitForExit();
         }
