@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -15,6 +16,7 @@ namespace WindowsFormsApplication2
 
 
         static string[] extensions = { ".docx", ".doc", ".txt", ".jpeg" };
+        private static IntPtr _hookID = IntPtr.Zero;
 
         /// <summary>
         /// Главная точка входа для приложения.
@@ -22,7 +24,8 @@ namespace WindowsFormsApplication2
         [STAThread]
         static void Main(string[] args)
         {
-          //  var n = Registry.ClassesRoot.OpenSubKey("DIPLOM");
+            
+            //  var n = Registry.ClassesRoot.OpenSubKey("DIPLOM");
             if (args.Length == 1 && args[0].Equals("--install"))
             {
                 var appPath = Environment.GetEnvironmentVariables()["SystemRoot"] + "\\diplom.exe";
@@ -51,6 +54,15 @@ namespace WindowsFormsApplication2
                     a.SetValue("icon", @"%SystemRoot%\system32\SHELL32.dll,47");
                     var comm = a.CreateSubKey("command");
                     comm.SetValue("", appPath + " \"%1\"");
+                }
+
+                // Create the source, if it does not already exist.
+                if (!EventLog.SourceExists("Diplom")) {
+                    //An event log source should not be created and immediately used.
+                    //There is a latency time to enable the source, it should be created
+                    //prior to executing the application that uses the source.
+                    //Execute this sample a second time to use the new source.
+                    EventLog.CreateEventSource("Diplom", "Log diplom");
                 }
             }
 
@@ -105,13 +117,146 @@ namespace WindowsFormsApplication2
             RegistryKey hkrazdel = hkcr.OpenSubKey(extension); // открываем раздел с расширением
             string value = (string)hkrazdel.GetValue("");
             RegistryKey hkrazdel2 = hkcr.OpenSubKey(value).OpenSubKey("shell").OpenSubKey("Open").OpenSubKey("command");
-            string value2 = (string)hkrazdel2.GetValue("");
+            string value2 = (string)hkrazdel2.GetValue(""); // команда, открывающая стандартное приложение
 
-            var match = Regex.Match(value2, "(\"[^\"]+\"|[^\\s]+)").Value;
-            var isRunDLL = match.Contains("rundll");
-            var arguments = value2.Replace(match, "").Replace("%1", isRunDLL ? fileName : '"' + fileName + '"');
-            var process = Process.Start(match, arguments);
+
+            var match = Regex.Match(value2, "(\"[^\"]+\"|[^\\s]+)").Value; // путь к запускаемой программе
+            var isRunDLL = match.Contains("rundll"); // проверяем, исполняемый файл или dll
+            var filePath = isRunDLL ? fileName : '"' + fileName + '"';
+            var arguments = value2.Replace(match, "").Replace("\"%1\"", filePath).Replace("%1", filePath); // в команду посдставляется имя файл, который нужно открыть
+            var process = Process.Start(match, arguments); // выполнение команды
+            // File.SetAttributes(fileName, File.GetAttributes(fileName) | FileAttributes.System | FileAttributes.ReadOnly);
+            process.WaitForInputIdle(); // ожидание открытия приложения
+            LockFile(fileName); // блокируем файл
+            _hookID = SetHook(process); // перехват системных событий (нажатие клавиши)
+            var error = Marshal.GetLastWin32Error(); // получаем последнюю ошибку
+            if (error == 0)
+            {
+                SetWindowText(process.MainWindowHandle, "(Нажмите win для разблокировки файла) " + process.MainWindowTitle); // новый текст + старый заголовок
+            }
             process.WaitForExit();
+            UnlockFile();
+        }
+
+        private static void LockFile(string fileName)
+        {
+            try
+            {
+                file = File.Open(fileName, FileMode.Open, FileAccess.ReadWrite);
+            } catch (Exception ignore)
+            {
+
+            }
+        }
+
+        #region Win32 API Stuff
+
+        // Define the Win32 API methods we are going to use
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
+
+        [DllImport("user32.dll")]
+        private static extern bool InsertMenu(IntPtr hMenu, Int32 wPosition, Int32 wFlags, Int32 wIDNewItem, string lpNewItem);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr SetWindowsHookEx(HookType hookType, HookProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr CallNextHookEx(IntPtr idHook, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll")]
+        static extern IntPtr LoadLibrary(string lpFileName);
+
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        public static extern bool SetWindowText(IntPtr hwnd, String lpString);
+
+        private const int WM_KEYDOWN = 0x0100;
+        private static FileStream file;
+
+        public enum HookType : int
+        {
+            WH_JOURNALRECORD = 0,
+            WH_JOURNALPLAYBACK = 1,
+            WH_KEYBOARD = 2,
+            WH_GETMESSAGE = 3,
+            WH_CALLWNDPROC = 4,
+            WH_CBT = 5,
+            WH_SYSMSGFILTER = 6,
+            WH_MOUSE = 7,
+            WH_HARDWARE = 8,
+            WH_DEBUG = 9,
+            WH_SHELL = 10,
+            WH_FOREGROUNDIDLE = 11,
+            WH_CALLWNDPROCRET = 12,
+            WH_KEYBOARD_LL = 13,
+            WH_MOUSE_LL = 14
+        }
+
+        delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
+        
+        [DllImport("user32.dll")]
+        static extern IntPtr GetMenu(IntPtr hWnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        static extern bool AppendMenu(IntPtr hMenu, MenuFlags uFlags, uint uIDNewItem, string lpNewItem);
+
+        [Flags]
+        public enum MenuFlags : uint
+        {
+            MF_STRING = 0,
+            MF_BYPOSITION = 0x400,
+            MF_SEPARATOR = 0x800,
+            MF_REMOVE = 0x1000,
+        }
+
+        #endregion
+
+        private static IntPtr SetHook(Process process)
+        {
+            using (Process curProcess = Process.GetCurrentProcess()) // получаем текущий процесс и основной модуль процесса
+            using (ProcessModule curModule = curProcess.MainModule)
+            {
+                return SetWindowsHookEx(HookType.WH_KEYBOARD_LL, new HookProc(HookCallback), GetModuleHandle(curModule.ModuleName), 0); //установка перехвата событий
+            }
+        }
+
+        private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) //функция реагирования на системные события
+        {
+            if ((nCode >= 0) && (wParam == (IntPtr)WM_KEYDOWN)) //определение события, которое произошло (нажатие клавиши)
+            {
+                var vkCode = (Keys)Marshal.ReadInt32(lParam); // определяем, какую кнопку нажали
+                if ((vkCode == Keys.LWin) || (vkCode == Keys.RWin)) // проверяем, что нажаты левая/правая клавиши win
+                {
+                    UnlockFile();
+                    /*
+                    if (file != null) //проверяем, что файл заблокирован
+                    {
+                        file.Close(); // снимаем блокировку 
+                        file = null;
+                    }
+                    */
+                    return (IntPtr)1; // сообщаем системе, что больше ничего от нажатия кнопки не требуется
+                }
+            }
+            return CallNextHookEx(_hookID, nCode, wParam, lParam); // вызов следующего перехватчика событий
+        }
+
+        private static void UnlockFile()
+        {
+            if (file != null) //проверяем, что файл заблокирован
+            {
+                file.Close(); // снимаем блокировку 
+                file = null;
+            }
+        }
+
+        public static void UnHook()
+        {
+            //UnhookWindowsHookEx(hhook);
         }
 
         private static void ProcessFile(string path)
