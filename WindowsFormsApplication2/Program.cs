@@ -124,28 +124,32 @@ namespace WindowsFormsApplication2
             var isRunDLL = match.Contains("rundll"); // проверяем, исполняемый файл или dll
             var filePath = isRunDLL ? fileName : '"' + fileName + '"';
             var arguments = value2.Replace(match, "").Replace("\"%1\"", filePath).Replace("%1", filePath); // в команду посдставляется имя файл, который нужно открыть
-            var process = Process.Start(match, arguments); // выполнение команды
+            process = Process.Start(match, arguments); // выполнение команды
             // File.SetAttributes(fileName, File.GetAttributes(fileName) | FileAttributes.System | FileAttributes.ReadOnly);
             process.WaitForInputIdle(); // ожидание открытия приложения
-            LockFile(fileName); // блокируем файл
-            _hookID = SetHook(process); // перехват системных событий (нажатие клавиши)
-            var error = Marshal.GetLastWin32Error(); // получаем последнюю ошибку
-            if (error == 0)
-            {
-                SetWindowText(process.MainWindowHandle, "(Нажмите win для разблокировки файла) " + process.MainWindowTitle); // новый текст + старый заголовок
+            if (LockFile(fileName))
+            { // блокируем файл
+                _hookID = SetHook(process); // перехват системных событий (нажатие клавиши)
+                var error = Marshal.GetLastWin32Error(); // получаем последнюю ошибку
+                if (error == 0)
+                {
+                    SetWindowText(process.MainWindowHandle, "(Нажмите win для разблокировки файла) " + process.MainWindowTitle); // новый текст + старый заголовок
+                }
             }
             process.WaitForExit();
-            UnlockFile();
+            UnlockFile(process);
+
         }
 
-        private static void LockFile(string fileName)
+        private static bool LockFile(string fileName)
         {
             try
             {
                 file = File.Open(fileName, FileMode.Open, FileAccess.ReadWrite);
-            } catch (Exception ignore)
+                return true;
+            } catch (Exception)
             {
-
+                return false;
             }
         }
 
@@ -176,6 +180,7 @@ namespace WindowsFormsApplication2
 
         private const int WM_KEYDOWN = 0x0100;
         private static FileStream file;
+        private static Process process;
 
         public enum HookType : int
         {
@@ -231,7 +236,7 @@ namespace WindowsFormsApplication2
                 var vkCode = (Keys)Marshal.ReadInt32(lParam); // определяем, какую кнопку нажали
                 if ((vkCode == Keys.LWin) || (vkCode == Keys.RWin)) // проверяем, что нажаты левая/правая клавиши win
                 {
-                    UnlockFile();
+                    UnlockFile(process);
                     /*
                     if (file != null) //проверяем, что файл заблокирован
                     {
@@ -245,8 +250,12 @@ namespace WindowsFormsApplication2
             return CallNextHookEx(_hookID, nCode, wParam, lParam); // вызов следующего перехватчика событий
         }
 
-        private static void UnlockFile()
+        private static void UnlockFile(Process process)
         {
+            if (process.HasExited == false)
+            {
+                SetWindowText(process.MainWindowHandle, process.MainWindowTitle.Replace("(Нажмите win для разблокировки файла) ", ""));
+            }
             if (file != null) //проверяем, что файл заблокирован
             {
                 file.Close(); // снимаем блокировку 
