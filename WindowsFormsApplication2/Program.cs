@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -15,7 +17,7 @@ namespace WindowsFormsApplication2
     {
 
 
-        static string[] extensions = { ".docx", ".doc", ".txt", ".jpeg" };
+        static string[] extensions = { ".docx", ".doc", ".txt", ".jpeg", ".pptx", ".pdf", ".rar", ".jpg" };
         private static IntPtr _hookID = IntPtr.Zero;
 
         /// <summary>
@@ -181,6 +183,7 @@ namespace WindowsFormsApplication2
         private const int WM_KEYDOWN = 0x0100;
         private static FileStream file;
         private static Process process;
+        private static System.Threading.Timer stateTimer;
 
         public enum HookType : int
         {
@@ -236,7 +239,18 @@ namespace WindowsFormsApplication2
                 var vkCode = (Keys)Marshal.ReadInt32(lParam); // определяем, какую кнопку нажали
                 if ((vkCode == Keys.LWin) || (vkCode == Keys.RWin)) // проверяем, что нажаты левая/правая клавиши win
                 {
+
+                    var fileName = file.Name;
+
                     UnlockFile(process);
+
+                    // Create an AutoResetEvent to signal the timeout threshold in the
+                    // timer callback has been reached.
+                    var autoEvent = new AutoResetEvent(false);
+
+                    var statusChecker = new StatusChecker(5, fileName);
+                    stateTimer = new System.Threading.Timer(statusChecker.CheckStatus, autoEvent, 0, 1000);
+                   
                     /*
                     if (file != null) //проверяем, что файл заблокирован
                     {
@@ -284,12 +298,22 @@ namespace WindowsFormsApplication2
         {
             if (File.Exists(Newpath)) // существует ли файл
             {
-                var windows = MessageBox.Show(mess, "Срочное сообщение!", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
-                //  (System.Windows.Forms.MessageBoxOptions)8192 /*MB_TASKMODAL*/
-                if (windows == DialogResult.Yes)
+                var hashfile = CalculateHash(path);
+                var hashfile2 = CalculateHash(Newpath);
+                if (hashfile.Equals(hashfile2))
                 {
                     File.Delete(Newpath);
                     File.Move(path, Newpath);
+                }
+                else
+                {
+                    var windows = MessageBox.Show(mess, "Срочное сообщение!", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
+                    //  (System.Windows.Forms.MessageBoxOptions)8192 /*MB_TASKMODAL*/
+                    if (windows == DialogResult.Yes)
+                    {
+                        File.Delete(Newpath);
+                        File.Move(path, Newpath);
+                    }
                 }
             }
             else
@@ -302,16 +326,74 @@ namespace WindowsFormsApplication2
         {
             if (File.Exists(Newpath)) // существует ли файл
             {
-                var windows = MessageBox.Show(mess, "Срочное сообщение!", MessageBoxButtons.YesNo);
-                if (windows == DialogResult.Yes)
+                var hashfile = CalculateHash(path);
+                var hashfile2 = CalculateHash(Newpath);
+                if (hashfile.Equals(hashfile2))
                 {
                     File.Delete(Newpath);
                     File.Copy(path, Newpath);
                 }
+                else
+                {
+                    var windows = MessageBox.Show(mess, "Срочное сообщение!", MessageBoxButtons.YesNo);
+                    if (windows == DialogResult.Yes)
+                    {
+                        File.Delete(Newpath);
+                        File.Copy(path, Newpath);
+                    }
+                }
+                
             }
             else
             {
                 File.Copy(path, Newpath);
+            }
+        }
+
+        private static object CalculateHash(string path)
+        {
+            using (FileStream stream = File.OpenRead(path))
+            {
+                SHA256Managed sha = new SHA256Managed();
+                byte[] hash = sha.ComputeHash(stream);
+                return BitConverter.ToString(hash);
+            }
+        }
+        class StatusChecker
+        {
+            private int invokeCount;
+            private int maxCount;
+            private string mainWindowTitle;
+            private string fileName;
+
+            public StatusChecker(int count, string path)
+            {
+                invokeCount = 0;
+                maxCount = count;
+                mainWindowTitle = process.MainWindowTitle;
+                fileName = path;
+            }
+
+            // This method is called by the timer delegate.
+            public void CheckStatus(Object stateInfo)
+            {
+                AutoResetEvent autoEvent = (AutoResetEvent)stateInfo;
+                invokeCount++;
+                SetWindowText(process.MainWindowHandle, "(Файл будет заблокирован через " + (maxCount - invokeCount) + " секунд) " + mainWindowTitle); // новый текст + старый заголовок
+
+
+                if (invokeCount == maxCount)
+                {
+                    // Reset the counter and signal the waiting thread.
+                    invokeCount = 0;
+                    autoEvent.Set();
+                    SetWindowText(process.MainWindowHandle, "(Нажмите win для разблокировки файла) " + mainWindowTitle); // новый текст + старый заголовок
+                    
+                    LockFile(fileName);
+
+                    stateTimer.Dispose();
+
+                }
             }
         }
     }
