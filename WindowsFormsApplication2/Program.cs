@@ -24,7 +24,7 @@ namespace WindowsFormsApplication2
         [STAThread]
         static void Main(string[] args)
         {
-            
+
             //  var n = Registry.ClassesRoot.OpenSubKey("DIPLOM");
             if (args.Length == 1 && args[0].Equals("--install"))
             {
@@ -45,6 +45,10 @@ namespace WindowsFormsApplication2
                 foreach (var item in extensions)
                 {
                     RegistryKey hkrazdel = hkcr.OpenSubKey(item); // открываем раздел с расширением
+                    if (hkrazdel == null)
+                    {
+                        continue;
+                    }
                     string value = (string)hkrazdel.GetValue("");
 
                     RegistryKey hkSoftware = hkcr.OpenSubKey(value);
@@ -57,7 +61,8 @@ namespace WindowsFormsApplication2
                 }
 
                 // Create the source, if it does not already exist.
-                if (!EventLog.SourceExists("Diplom")) {
+                if (!EventLog.SourceExists("Diplom"))
+                {
                     //An event log source should not be created and immediately used.
                     //There is a latency time to enable the source, it should be created
                     //prior to executing the application that uses the source.
@@ -65,47 +70,76 @@ namespace WindowsFormsApplication2
                     EventLog.CreateEventSource("Diplom", "Log diplom");
                 }
             }
-
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            
-            if (args.Length > 0) // провепить, есть ли в массиве хоть один элемент  (args.Length)
+            else if (args.Length == 1 && args[0].Equals("--uninstall"))
             {
-                // чтение входных параметров
-                string path = args[0]; 
+                var appPath = Environment.GetEnvironmentVariables()["SystemRoot"] + "\\diplom.exe";
+                File.Delete(appPath);
 
-                if (Directory.Exists(path))  // проверяем, что папка существует (папка это или файл)
+                using (RegistryKey hkcr = Registry.ClassesRoot)
                 {
-                    foreach (var fileName in Directory.EnumerateFiles(path))  // цикл для каждого файла в папке
-                    {
-                        ProcessFile(fileName);
-                    }
-                }
-                else
-                {
-                    var fileInf = new FileInfo(path);
-                    if (fileInf.Extension.Equals(".diplom"))
-                    {
-                        string Newpath = path.Remove(path.Length - 7);
-                        FileCopy(path, Newpath, "Незащищенный файл уже существет. Заменить?");
+                    hkcr.DeleteSubKeyTree("DIPLOM");
+                    hkcr.DeleteSubKeyTree(".diplom");
 
-                        callProgram(Newpath);  // открыть файл через программу по умолчанию и дождаться завершения
-
-                        FileMove(Newpath, path, "Защищенный файл уже существует. Заменить?");
-                    }
-                    else
+                    foreach (var item in extensions)
                     {
-                        ProcessFile(path); // string Newpath = path + @".diplom"; File.Move(path, Newpath);
+                        using (RegistryKey hkrazdel = hkcr.OpenSubKey(item)) // открываем раздел с расширением
+                        {
+                            if (hkrazdel == null)
+                            {
+                                continue;
+                            }
+                            string value = (string)hkrazdel.GetValue("");
+
+                            RegistryKey hkSoftware = hkcr.OpenSubKey(value);
+                            RegistryKey hkMicrosoft = hkSoftware.OpenSubKey("shell", RegistryKeyPermissionCheck.ReadWriteSubTree);
+                            hkMicrosoft.DeleteSubKeyTree("diplom");
+                        }
                     }
                 }
 
             }
-            /*
-                    WindowsIdentity identity = new WindowsIdentity("Valeria");
-                        WindowsImpersonationContext context = identity.Impersonate();
+            else
+            {
 
-                        
-                        */
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+
+                if (args.Length > 0) // провепить, есть ли в массиве хоть один элемент  (args.Length)
+                {
+                    // чтение входных параметров
+                    string path = args[0];
+
+                    if (Directory.Exists(path))  // проверяем, что папка существует (папка это или файл)
+                    {
+                        foreach (var fileName in Directory.EnumerateFiles(path))  // цикл для каждого файла в папке
+                        {
+                            ProcessFile(fileName);
+                        }
+                    }
+                    else
+                    {
+                        var fileInf = new FileInfo(path);
+                        if (fileInf.Extension.Equals(".diplom"))
+                        {
+                            string Newpath = path.Remove(path.Length - 7);
+                            FileCopy(path, Newpath, "Незащищенный файл уже существет. Заменить?");
+
+                            callProgram(Newpath);  // открыть файл через программу по умолчанию и дождаться завершения
+
+                            FileMove(Newpath, path, "Защищенный файл уже существует. Заменить?");
+                        }
+                        else
+                        {
+                            ProcessFile(path); // string Newpath = path + @".diplom"; File.Move(path, Newpath);
+                        }
+                    }
+
+                }
+                /*
+                    WindowsIdentity identity = new WindowsIdentity("Valeria");
+                    WindowsImpersonationContext context = identity.Impersonate();
+                */
+            }
         }
 
         private static void callProgram(string fileName)
