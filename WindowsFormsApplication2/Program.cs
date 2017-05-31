@@ -32,34 +32,39 @@ namespace WindowsFormsApplication2
             {
                 var appPath = Environment.GetEnvironmentVariables()["SystemRoot"] + "\\diplom.exe";
                 File.Copy(Application.ExecutablePath, appPath, true);
-                RegistryKey hklm = Registry.ClassesRoot;
-                var papka = hklm.CreateSubKey("DIPLOM");
-                papka.SetValue("", "Защищенный файл");
-                var shell = papka.CreateSubKey("shell");
-                var open = shell.CreateSubKey("open");
-                var command = open.CreateSubKey("command");
-                command.SetValue("", appPath + " \"%1\"");
-
-                RegistryKey hkcr = Registry.ClassesRoot; // открыли большую ветку HKEY_CLASSES_ROOT
-                var extension = hkcr.CreateSubKey(".diplom");
-                extension.SetValue("", "DIPLOM");
-
-                foreach (var item in extensions)
+                using (RegistryKey hkcr = Registry.ClassesRoot) // открыли большую ветку HKEY_CLASSES_ROOT
                 {
-                    RegistryKey hkrazdel = hkcr.OpenSubKey(item); // открываем раздел с расширением
-                    if (hkrazdel == null)
-                    {
-                        continue;
-                    }
-                    string value = (string)hkrazdel.GetValue("");
+                    var papka = hkcr.CreateSubKey("DIPLOM");
+                    papka.SetValue("", "Защищенный файл");
+                    var shell = papka.CreateSubKey("shell");
+                    var open = shell.CreateSubKey("open");
+                    var command = open.CreateSubKey("command");
+                    command.SetValue("", appPath + " \"%1\"");
+                    
+                    var extension = hkcr.CreateSubKey(".diplom");
+                    extension.SetValue("", "DIPLOM");
 
-                    RegistryKey hkSoftware = hkcr.OpenSubKey(value);
-                    RegistryKey hkMicrosoft = hkSoftware.OpenSubKey("shell", RegistryKeyPermissionCheck.ReadWriteSubTree);
-                    var a = hkMicrosoft.CreateSubKey("diplom");
-                    a.SetValue("", "Защитить");
-                    a.SetValue("icon", @"%SystemRoot%\system32\SHELL32.dll,47");
-                    var comm = a.CreateSubKey("command");
-                    comm.SetValue("", appPath + " \"%1\"");
+                    foreach (var item in extensions)
+                    {
+                        string value = null;
+                        using (RegistryKey hkrazdel = hkcr.OpenSubKey(item)) // открываем раздел с расширением
+                        {
+                            if (hkrazdel != null)
+                            {
+                                value = (string)hkrazdel.GetValue("");
+                            }
+                            
+                        }
+                        if (value == null) {
+                            continue;
+                        }
+                        
+                        var diplom = hkcr.CreateSubKey(value).CreateSubKey("shell").CreateSubKey("diplom");
+                        diplom.SetValue("", "Защитить");
+                        diplom.SetValue("icon", @"%SystemRoot%\system32\SHELL32.dll,47");
+                        var comm = diplom.CreateSubKey("command");
+                        comm.SetValue("", appPath + " \"%1\"");
+                    }
                 }
 
                 // Create the source, if it does not already exist.
@@ -86,15 +91,29 @@ namespace WindowsFormsApplication2
                     {
                         using (RegistryKey hkrazdel = hkcr.OpenSubKey(item)) // открываем раздел с расширением
                         {
-                            if (hkrazdel == null)
+                            string value = null;
+                            if (hkrazdel != null)
+                            {
+                                value = (string)hkrazdel.GetValue("");
+                            }
+                            if (value == null)
                             {
                                 continue;
                             }
-                            string value = (string)hkrazdel.GetValue("");
 
-                            RegistryKey hkSoftware = hkcr.OpenSubKey(value);
-                            RegistryKey hkMicrosoft = hkSoftware.OpenSubKey("shell", RegistryKeyPermissionCheck.ReadWriteSubTree);
-                            hkMicrosoft.DeleteSubKeyTree("diplom");
+                            using (RegistryKey hkSoftware = hkcr.OpenSubKey(value))
+                            {
+                                if (hkSoftware != null)
+                                {
+                                    using (RegistryKey hkMicrosoft = hkSoftware.OpenSubKey("shell", RegistryKeyPermissionCheck.ReadWriteSubTree))
+                                    {
+                                        if (hkMicrosoft != null)
+                                        {
+                                            hkMicrosoft.DeleteSubKeyTree("diplom");
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
